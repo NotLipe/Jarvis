@@ -741,7 +741,7 @@ function startListening(mode = "click") {
   listenMode = mode;
   finalText = ""; interimText = "";
   rec = new SR();
-  rec.lang = navigator.language || "en-US";
+  rec.lang = "en-US";
   rec.interimResults = true;
   rec.continuous = mode === "hold";
   rec.onstart = () => { listening = true; setState("listening"); diag("MIC CHANNEL OPEN"); };
