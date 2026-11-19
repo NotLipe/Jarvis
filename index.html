@@ -288,6 +288,7 @@ body[data-state="listening"] #micBtn{background:var(--c);color:#02101f}
 
     <form class="cmd" id="cmdForm" data-boot autocomplete="off">
       <button type="button" class="btn" id="micBtn">MIC</button>
+      <button type="button" class="btn" id="langBtn" aria-label="Language">EN</button>
       <label class="sr" for="cmdInput">Command</label>
       <input id="cmdInput" type="text" placeholder="TYPE A COMMAND // E.G. PROGRESS, ETA, STATUS">
       <button type="submit" class="btn">SEND</button>
@@ -327,7 +328,8 @@ const DATA = {
 
   /* Who JARVIS is talking to. Used in greetings and the brief. */
   user: {
-    name: "sir"
+    name: "sir",
+    namePt: "senhor"
   },
 
   /* PRIMARY OBJECTIVE card + the "OBJECTIVE:" line in the header. */
@@ -417,6 +419,7 @@ const DATA = {
   settings: {
     simulate: true,             // jitter vitals + occasional objective gains. Set false once wired to real data.
     voiceLang: "en-GB",
+    voiceLangPt: "pt-BR",
     voiceRate: 1.0,
     voicePitch: 0.9,
     telemetryIntervalMs: 3000,
@@ -430,7 +433,10 @@ const DATA = {
    LLM / backend if you want open-ended answers. It receives the user's
    text and must return a string (or null if it handled things itself).
    ========================================================================== */
+window.LANG = (() => { try { return localStorage.getItem("jarvis.lang") === "pt" ? "pt" : "en"; } catch (e) { return "en"; } })();
+
 async function getAssistantReply(text) {
+  if (window.LANG === "pt") return getAssistantReplyPt(text);
   const t = text.toLowerCase();
   const o = DATA.objective, info = objectiveInfo();
   const name = DATA.user.name;
@@ -470,6 +476,46 @@ async function getAssistantReply(text) {
   return `Noted, ${name}. That's beyond my local protocols for now. Try progress, ETA, status, recommendations, or morning brief.`;
 }
 
+async function getAssistantReplyPt(text) {
+  const t = text.toLowerCase();
+  const o = DATA.objective, info = objectiveInfo();
+  const name = DATA.user.namePt || DATA.user.name;
+
+  if (/(briefing|resumo do dia|relat[oó]rio)/.test(t)) { runBrief(); return null; }
+  if (/(se apresent|fale sobre voc[eê]|quem (é|e) voc[eê]|quem voc[eê] (é|e)|o que (é|e) voc[eê]|qual (é |e )?o seu nome|qual (é |e )?seu nome)/.test(t))
+    return `Permita que eu me apresente. Eu sou o JARVIS, um assistente pessoal criado para comandar a central de projetos do ${name}. Eu fico de olho nos números, aponto o que precisa de atenção e ajudo a transformar ideias em ação. Pense em mim como aquela voz discreta nos bastidores que nunca dorme.`;
+  if (/(o que voc[eê] faz|o que voc[eê] pode fazer|o que voc[eê] sabe fazer|como voc[eê] funciona|pra que voc[eê] serve|para que voc[eê] serve)/.test(t))
+    return `Eu funciono com três agentes, ${name}. O Scout reúne informações toda noite: números do canal, tendências e atividade de código. O Operator cuida do trabalho pesado, como transformar lives em cortes e prepará-los para publicação, sempre com a sua aprovação. E o Advisor lê tudo e entrega três prioridades claras para o dia. Tudo o que eles reportam aparece aqui, nesta tela.`;
+  if (/(quem (te )?(criou|fez|construiu|programou|desenvolveu)|quem (é|e) (o )?seu (criador|chefe|dono))/.test(t))
+    return `Fui construído pelo ${name}, com uma ajudinha do Claude. Cada linha desta interface responde a ele.`;
+  if (/(meus amigos|minha galera|diga oi|diz oi|d[aá] oi|fala oi|cumprimente)/.test(t))
+    return `Muito prazer, pessoal. Bem-vindos à central de comando. Fiquem à vontade, e por favor, tentem não tocar em nada importante.`;
+  if (/(tudo bem|como (voc[eê] )?(est[aá]|vai))/.test(t))
+    return `Operando com capacidade total, ${name}. Todos os sistemas normais, e obrigado por perguntar.`;
+  if (/(^|[\s,!?.])(ol[aá]|oi|e a[ií]|bom dia|boa tarde|boa noite)($|[\s,!?.])/.test(t))
+    return `${partOfDay()}, ${name}. Todos os sistemas a postos.`;
+  if (/obrigad/.test(t)) return `Sempre um prazer, ${name}.`;
+  if (/(quando|prazo|previs[aã]o|terminar|concluir)/.test(t))
+    return info.status === "COMPLETE"
+      ? `O objetivo já foi concluído, ${name}.`
+      : `No ritmo atual, a conclusão está prevista para ${info.etaLong}. O prazo é ${longDate(o.deadline)}.`;
+  if (/(recomend|conselho|o que (eu )?devo|prioridade|foco|pr[oó]ximo passo)/.test(t))
+    return "Minhas três principais: " + recommendations().map((r, i) => `${i + 1}. ${r}`).join(" ");
+  if (/(progresso|objetivo|meta|porcentagem)/.test(t))
+    return `Você está em ${fmtObj(o.current)} de ${fmtObj(o.target)}, ${info.pct.toFixed(1).replace(".", ",")} por cento. Status: ${statusWord(info.status)}. Faltam ${fmtObj(info.remaining)}.`;
+  if (/(status|sistema|sinais vitais|sa[uú]de|diagn[oó]stico)/.test(t)) return vitalsSummary();
+  if (/(que horas|hor[aá]rio|\bhora\b)/.test(t)) return `São ${new Date().toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit" })}, ${name}.`;
+  if (/(que dia|\bdata\b|hoje)/.test(t)) return `Hoje é ${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}.`;
+  for (const s of DATA.stats) {
+    const words = s.label.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    if (words.some(w => t.includes(w.replace(/s$/, ""))))
+      return `${titleCase(s.label)} está em ${fmtStat(s, s.value)}${s.goal ? `, com meta de ${fmtStat(s, s.goal)}` : ""}.`;
+  }
+  if (/(ajuda|comandos|o que (eu )?posso perguntar)/.test(t))
+    return "Pergunte quem eu sou, o que eu faço, sobre o progresso, o prazo, qualquer uma das suas métricas, o status do sistema, recomendações, ou peça o briefing.";
+  return `Anotado, ${name}. Isso está além dos meus protocolos locais por enquanto. Tente progresso, prazo, status, recomendações ou briefing.`;
+}
+
 /* ==========================================================================
    ENGINE — no edits needed below to change data.
    ========================================================================== */
@@ -481,17 +527,21 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const isPt = () => window.LANG === "pt";
+const locale = () => isPt() ? "pt-BR" : "en-US";
+window.statusWord = st => isPt() ? ({ "COMPLETE": "concluído", "ON TRACK": "no ritmo", "AT RISK": "em risco", "STALLED": "parado" }[st] || st.toLowerCase()) : st.toLowerCase();
+const userName = () => isPt() ? (DATA.user.namePt || DATA.user.name) : DATA.user.name;
 
 /* ---------- formatting ---------- */
 function fmtNum(v, o = {}) {
   const d = o.decimals ?? 0;
-  return (o.prefix || "") + new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }).format(v) + (o.suffix || "");
+  return (o.prefix || "") + new Intl.NumberFormat(locale(), { minimumFractionDigits: d, maximumFractionDigits: d }).format(v) + (o.suffix || "");
 }
 window.fmtObj = v => fmtNum(v, DATA.objective);
 window.fmtStat = (s, v) => fmtNum(v, s);
 window.titleCase = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-window.partOfDay = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
-window.longDate = iso => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" });
+window.partOfDay = () => { const h = new Date().getHours(); return isPt() ? (h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite") : (h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"); };
+window.longDate = iso => new Date(iso + "T12:00:00").toLocaleDateString(locale(), { month: "long", day: "numeric" });
 const stamp = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 
 /* ---------- objective math ---------- */
@@ -508,12 +558,16 @@ window.objectiveInfo = function () {
   else if (pace > 0) etaDate = new Date(now.getTime() + remaining / pace * day);
   const status = o.statusOverride || (remaining === 0 ? "COMPLETE" : !etaDate ? "STALLED" : etaDate <= end ? "ON TRACK" : "AT RISK");
   const eta = o.etaOverride || (etaDate ? etaDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase() : "—");
-  const etaLong = o.etaOverride || (etaDate ? etaDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "undetermined");
+  const etaLong = o.etaOverride || (etaDate ? etaDate.toLocaleDateString(locale(), { month: "long", day: "numeric" }) : (isPt() ? "indeterminada" : "undetermined"));
   return { pct, remaining, pace, daysLeft, status, eta, etaLong, perDayNeeded: daysLeft > 0 ? remaining / daysLeft : remaining };
 };
 
 window.vitalsSummary = function () {
   const hot = DATA.vitals.filter(v => v.value >= v.warnAt);
+  if (isPt()) {
+    if (!hot.length) return `Todos os ${DATA.vitals.length} sinais vitais do sistema estão normais, ${userName()}.`;
+    return `${hot.map(v => `${titleCase(v.label)} está alto, em ${Math.round(v.value)} por cento`).join(", e ")}. O resto está normal.`;
+  }
   if (!hot.length) return `All ${DATA.vitals.length} system vitals are nominal, ${DATA.user.name}.`;
   return `${hot.map(v => `${titleCase(v.label)} is running high at ${Math.round(v.value)} percent`).join(", and ")}. Everything else is nominal.`;
 };
@@ -521,6 +575,20 @@ window.vitalsSummary = function () {
 window.recommendations = function () {
   if (DATA.brief.recommendations && DATA.brief.recommendations.length) return DATA.brief.recommendations.slice(0, 3);
   const o = DATA.objective, info = objectiveInfo(), recs = [];
+  if (isPt()) {
+    if (info.status === "COMPLETE") recs.push("O objetivo foi concluído. Defina a próxima meta antes que o embalo passe.");
+    else recs.push(`Feche cerca de ${fmtObj(Math.ceil(info.perDayNeeded))} por dia para bater a meta até ${longDate(o.deadline)}.`);
+    const rk = DATA.stats.filter(s => s.goal).map(s => ({ s, r: s.value / s.goal })).sort((a, b) => a.r - b.r);
+    if (rk[0] && rk[0].r < 1)
+      recs.push(`Dedique sua primeira hora de foco a ${titleCase(rk[0].s.label)}. Está em ${Math.round(rk[0].r * 100)} por cento da meta.`);
+    const hv = DATA.vitals.find(v => v.value >= v.warnAt);
+    if (hv) recs.push(`Verifique ${titleCase(hv.label)}. Está rodando a ${Math.round(hv.value)} por cento.`);
+    else if (rk[1] && rk[1].r < 1)
+      recs.push(`Depois, puxe ${titleCase(rk[1].s.label)}, hoje em ${fmtStat(rk[1].s, rk[1].s.value)} contra ${fmtStat(rk[1].s, rk[1].s.goal)}.`);
+    const fp = ["Resolva um bloqueio antes do meio-dia e registre.", "Revise os números de ontem em dez minutos e siga em frente.", "Reserve um bloco de duas horas de foco nesta tarde."];
+    while (recs.length < 3) recs.push(fp[recs.length - 1] || fp[0]);
+    return recs.slice(0, 3);
+  }
   if (info.status === "COMPLETE") recs.push("The objective is complete. Set the next target before the momentum fades.");
   else recs.push(`Close about ${fmtObj(Math.ceil(info.perDayNeeded))} per day to hit the target by ${longDate(o.deadline)}.`);
   const ranked = DATA.stats.filter(s => s.goal).map(s => ({ s, r: s.value / s.goal })).sort((a, b) => a.r - b.r);
@@ -687,6 +755,19 @@ function pickVoice() {
   if (!synth) return;
   const vs = synth.getVoices();
   if (!vs.length) return;
+  if (isPt()) {
+    const maleBR = /Antonio|Daniel|Donato|Fabio|F[aá]bio|Humberto|Julio|J[uú]lio|Nicolau|Valerio|Val[eé]rio|Eddy|Reed|Rocko|Felipe/i;
+    const femaleBR = /female|feminina|Francisca|Maria|Luciana|Thalita|Fernanda|Leila|Manuela|Yara|Brenda|Elza|Giovanna|Leticia|Let[ií]cia|Raquel|Joana|Catarina|Google portugu[eê]s/i;
+    const isBR = v => /pt[-_]BR/i.test(v.lang);
+    const isPtV = v => /^pt/i.test(v.lang);
+    voice =
+      vs.find(v => isBR(v) && maleBR.test(v.name)) ||
+      vs.find(v => isPtV(v) && maleBR.test(v.name)) ||
+      vs.find(v => isBR(v) && !femaleBR.test(v.name)) ||
+      vs.find(v => isPtV(v) && !femaleBR.test(v.name)) ||
+      vs.find(isBR) || vs.find(isPtV) || null;
+    if (voice) return;
+  }
   const maleGB = /Google UK English Male|Daniel|Arthur|Oliver|Microsoft (Ryan|Thomas|George|Alfie|Elliot|Ethan|Noah|Oliver)/i;
   const female = /female|woman|Hazel|Susan|Kate|Serena|Libby|Sonia|Maisie|Mia|Bella|Hollie|Abbie|Olivia|Martha|Stephanie|Fiona|Moira|Karen|Samantha|Victoria|Zira|Aria|Jenny|Ava|Allison|Tessa|Veena|Google US English/i;
   const maleOther = /Microsoft (Guy|David|Mark|Andrew|Brian|Christopher|Eric|Roger|Steffan)|Alex|Fred|Aaron|\bMale\b/i;
@@ -717,7 +798,7 @@ function speak(text, { subtitles = false, log = true } = {}) {
   parts.forEach((p, i) => {
     const u = new SpeechSynthesisUtterance(p);
     if (voice) u.voice = voice;
-    u.lang = voice ? voice.lang : DATA.settings.voiceLang;
+    u.lang = voice ? voice.lang : (isPt() ? DATA.settings.voiceLangPt : DATA.settings.voiceLang);
     u.rate = DATA.settings.voiceRate;
     u.pitch = DATA.settings.voicePitch;
     u.onstart = () => {
@@ -748,7 +829,7 @@ let voiceEnergy = 0;
 function startListening(mode = "click") {
   if (!SR) {
     tele("VOICE INPUT UNAVAILABLE IN THIS BROWSER", "warn");
-    speak(`Voice input isn't supported in this browser, ${DATA.user.name}. The command line is available.`, { log: false });
+    speak(isPt() ? `A entrada de voz não é suportada neste navegador, ${userName()}. A linha de comando está disponível.` : `Voice input isn't supported in this browser, ${DATA.user.name}. The command line is available.`, { log: false });
     return;
   }
   if (listening) return;
@@ -757,7 +838,7 @@ function startListening(mode = "click") {
   listenMode = mode;
   finalText = ""; interimText = "";
   rec = new SR();
-  rec.lang = "en-US";
+  rec.lang = isPt() ? "pt-BR" : "en-US";
   rec.interimResults = true;
   rec.continuous = mode === "hold";
   rec.onstart = () => { listening = true; setState("listening"); diag("MIC CHANNEL OPEN"); };
@@ -802,7 +883,7 @@ async function handleInput(raw) {
   try {
     [reply] = await Promise.all([getAssistantReply(text), wait(550)]);
   } catch (err) {
-    reply = `I hit an error processing that, ${DATA.user.name}.`;
+    reply = isPt() ? `Tive um erro ao processar isso, ${userName()}.` : `I hit an error processing that, ${DATA.user.name}.`;
     diag("REPLY HANDLER ERROR", "warn");
   }
   if (reply == null) return;
@@ -812,6 +893,21 @@ async function handleInput(raw) {
 /* ---------- morning brief ---------- */
 function buildBrief() {
   const o = DATA.objective, info = objectiveInfo(), name = DATA.user.name;
+  if (isPt()) {
+    const np = userName();
+    const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+    const lp = [];
+    lp.push(`${partOfDay()}, ${np}. Aqui está o seu briefing de ${hoje}.`);
+    lp.push(`Objetivo principal: ${o.title.replace(/[\[\]]/g, "")}.`);
+    lp.push(`Você está em ${fmtObj(o.current)} de ${fmtObj(o.target)}, ou seja, ${info.pct.toFixed(1).replace(".", ",")} por cento, e o status é ${statusWord(info.status)}.`);
+    if (info.status !== "COMPLETE") lp.push(`Faltam ${info.daysLeft} dias para o prazo. No ritmo atual, a conclusão está prevista para ${info.etaLong}.`);
+    lp.push("Números principais: " + DATA.stats.map(s => `${titleCase(s.label)}, ${fmtStat(s, s.value)}`).join("; ") + ".");
+    lp.push(vitalsSummary());
+    lp.push("Minhas três principais recomendações para hoje.");
+    recommendations().forEach((r, i) => lp.push(`${["Um", "Dois", "Três"][i]}: ${r}`));
+    lp.push(`Esse é o briefing, ${np}. Fico no aguardo.`);
+    return lp;
+  }
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const lines = [];
   lines.push(`${partOfDay()}, ${name}. Here is your brief for ${today}.`);
@@ -1021,6 +1117,22 @@ orbWrap.addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); toggleListening(); }
 });
 $("#micBtn").addEventListener("click", toggleListening);
+function applyLang() {
+  $("#langBtn").textContent = isPt() ? "PT" : "EN";
+  $("#cmdInput").placeholder = isPt() ? "DIGITE UM COMANDO // EX.: PROGRESSO, PRAZO, STATUS" : "TYPE A COMMAND // E.G. PROGRESS, ETA, STATUS";
+  pickVoice();
+}
+$("#langBtn").addEventListener("click", () => {
+  window.LANG = isPt() ? "en" : "pt";
+  try { localStorage.setItem("jarvis.lang", window.LANG); } catch (e) {}
+  if (listening) stopListening();
+  stopSpeaking();
+  applyLang();
+  renderAll();
+  tele("LANGUAGE › " + (isPt() ? "PT-BR" : "EN"));
+  speak(isPt() ? `Idioma alterado para português, ${userName()}.` : `Language set to English, ${DATA.user.name}.`);
+});
+applyLang();
 $("#briefBtn").addEventListener("click", () => runBrief());
 $("#cmdForm").addEventListener("submit", e => {
   e.preventDefault();
@@ -1106,7 +1218,9 @@ async function boot() {
   startFeeds();
   await wait(500 * fast);
   const info = objectiveInfo();
-  speak(`${partOfDay()}, ${DATA.user.name}. All systems are online. Your objective is at ${info.pct.toFixed(0)} percent. Hold space or tap the core to talk, or ask for your morning brief.`);
+  speak(isPt()
+    ? `${partOfDay()}, ${userName()}. Todos os sistemas online. Seu objetivo está em ${info.pct.toFixed(0)} por cento. Segure espaço ou toque no núcleo para falar, ou peça o seu briefing.`
+    : `${partOfDay()}, ${DATA.user.name}. All systems are online. Your objective is at ${info.pct.toFixed(0)} percent. Hold space or tap the core to talk, or ask for your morning brief.`);
   setTimeout(() => $("#boot").remove(), 1200);
 }
 
