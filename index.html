@@ -416,7 +416,7 @@ const DATA = {
 
   settings: {
     simulate: true,             // jitter vitals + occasional objective gains. Set false once wired to real data.
-    voiceLang: "en-GB",
+    voiceLang: "en-US",
     voiceRate: 1.0,
     voicePitch: 0.9,
     telemetryIntervalMs: 3000,
@@ -677,7 +677,7 @@ function pickVoice() {
   if (!synth) return;
   const vs = synth.getVoices();
   if (!vs.length) return;
-  const prefs = [/Daniel/i, /Google UK English Male/i, /Microsoft (Ryan|George)/i, /en[-_]GB/i, /^en/i];
+  const prefs = [/Google US English/i, /Microsoft (Guy|Mark|David)/i, /Alex/i, /en[-_]US/i, /^en/i];
   for (const p of prefs) {
     const v = vs.find(v => p.test(v.name) || p.test(v.lang));
     if (v) { voice = v; return; }
