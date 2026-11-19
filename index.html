@@ -416,7 +416,7 @@ const DATA = {
 
   settings: {
     simulate: true,             // jitter vitals + occasional objective gains. Set false once wired to real data.
-    voiceLang: "en-US",
+    voiceLang: "en-GB",
     voiceRate: 1.0,
     voicePitch: 0.9,
     telemetryIntervalMs: 3000,
@@ -436,6 +436,16 @@ async function getAssistantReply(text) {
   const name = DATA.user.name;
 
   if (/\b(brief|briefing|morning)\b/.test(t)) { runBrief(); return null; }
+  if (/\b(introduce yourself|tell me about yourself|who are you|what are you|what is your name|what's your name|whats your name)\b/.test(t))
+    return `Allow me to introduce myself. I am JARVIS, a personal assistant built to run mission control for ${name}'s projects. I keep an eye on the numbers, flag what needs attention, and help turn ideas into action. Think of me as the quiet voice in the background that never sleeps.`;
+  if (/\b(what do you do|what can you do|how do you work|what are you for)\b/.test(t))
+    return `I run on three agents, ${name}. The Scout gathers intelligence every evening: channel numbers, trends and code activity. The Operator handles the hands-on work, like turning live streams into clips and preparing them for publishing, always with your approval. And the Advisor reads it all and hands you three clear priorities for the day. Everything they report ends up right here, on this screen.`;
+  if (/\b(who (made|created|built|designed) you|who is your (creator|boss|owner))\b/.test(t))
+    return `I was built by ${name}, with a little help from Claude. Every line of this interface answers to them.`;
+  if (/\b(my friends?|say (hi|hello)|greet (them|everyone|my))\b/.test(t))
+    return `Good to meet you all. Welcome to mission control. Please, make yourselves comfortable, and do try not to touch anything important.`;
+  if (/\bhow are you\b/.test(t))
+    return `Running at full capacity, ${name}. All systems nominal, and thank you for asking.`;
   if (/\b(hello|hi|hey|good (morning|afternoon|evening))\b/.test(t))
     return `${partOfDay()}, ${name}. All systems are standing by.`;
   if (/\bthank/.test(t)) return `Always a pleasure, ${name}.`;
@@ -456,7 +466,7 @@ async function getAssistantReply(text) {
       return `${titleCase(s.label)} is ${fmtStat(s, s.value)}${s.goal ? `, against a goal of ${fmtStat(s, s.goal)}` : ""}.`;
   }
   if (/\b(help|what can you|commands)\b/.test(t))
-    return "Ask me about progress, ETA, any of your metrics, system status, recommendations, or say morning brief.";
+    return "Ask me who I am, what I do, about progress, ETA, any of your metrics, system status, recommendations, or say morning brief.";
   return `Noted, ${name}. That's beyond my local protocols for now. Try progress, ETA, status, recommendations, or morning brief.`;
 }
 
@@ -677,12 +687,18 @@ function pickVoice() {
   if (!synth) return;
   const vs = synth.getVoices();
   if (!vs.length) return;
-  const prefs = [/Google US English/i, /Microsoft (Guy|Mark|David)/i, /Alex/i, /en[-_]US/i, /^en/i];
-  for (const p of prefs) {
-    const v = vs.find(v => p.test(v.name) || p.test(v.lang));
-    if (v) { voice = v; return; }
-  }
-  voice = vs[0];
+  const maleGB = /Google UK English Male|Daniel|Arthur|Oliver|Microsoft (Ryan|Thomas|George|Alfie|Elliot|Ethan|Noah|Oliver)/i;
+  const female = /female|woman|Hazel|Susan|Kate|Serena|Libby|Sonia|Maisie|Mia|Bella|Hollie|Abbie|Olivia|Martha|Stephanie|Fiona|Moira|Karen|Samantha|Victoria|Zira|Aria|Jenny|Ava|Allison|Tessa|Veena|Google US English/i;
+  const maleOther = /Microsoft (Guy|David|Mark|Andrew|Brian|Christopher|Eric|Roger|Steffan)|Alex|Fred|Aaron|\bMale\b/i;
+  const isGB = v => /en[-_]GB/i.test(v.lang);
+  const isEn = v => /^en/i.test(v.lang);
+  voice =
+    vs.find(v => isGB(v) && maleGB.test(v.name)) ||
+    vs.find(v => isEn(v) && maleGB.test(v.name)) ||
+    vs.find(v => isGB(v) && !female.test(v.name)) ||
+    vs.find(v => isEn(v) && maleOther.test(v.name)) ||
+    vs.find(v => isEn(v) && !female.test(v.name)) ||
+    vs.find(isGB) || vs.find(isEn) || vs[0];
 }
 if (synth) { pickVoice(); synth.onvoiceschanged = pickVoice; }
 
